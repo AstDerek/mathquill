@@ -272,7 +272,7 @@ _.blockify = function() {
  * Root math elements with event delegation.
  ********************************************/
 
-function createRoot(jQ, root, textbox, editable) {
+function createRoot(jQ, root, textbox, editable, include_toolbar) {
   var contents = jQ.contents().detach();
 
   if (!textbox)
@@ -282,7 +282,7 @@ function createRoot(jQ, root, textbox, editable) {
     block: root,
     revert: function() {
       jQ.empty().unbind('.mathquill')
-        .removeClass('mathquill-rendered-math mathquill-editable mathquill-textbox')
+        .removeClass('mathquill-rendered-math mathquill-editable mathquill-textbox mathquill-editor')
         .append(contents);
     }
   });
@@ -299,6 +299,8 @@ function createRoot(jQ, root, textbox, editable) {
   var textarea = root.textarea.children();
   if (textbox)
     jQ.addClass('mathquill-textbox');
+  if (include_toolbar)
+    addToolbar(root, jQ);
 
   textarea.focus(function(e) {
     if (!cursor.parent)
@@ -313,6 +315,8 @@ function createRoot(jQ, root, textbox, editable) {
     cursor.hide().parent.blur();
     if (cursor.selection)
       cursor.selection.jQ.addClass('blur');
+    e.stopPropagation();
+  }).bind('selectstart', function(e) {
     e.stopPropagation();
   });
 
@@ -396,6 +400,93 @@ function createRoot(jQ, root, textbox, editable) {
   var anticursor, blink = cursor.blink;
 }
 
+function addToolbar(root, jQ) {
+  // the button groups include most LatexCmds, de-duped and categorized.
+  // functions like "log" are excluded, since we have some fu to auto-convert
+  // them as they are typed (i.e. you can just type "log", don't need the \ )
+  var button_tabs = [
+    { name: 'Basic',
+      example: '+',
+      button_groups: [
+        ["subscript", "supscript", "frac", "sqrt", "nthroot", "langle", "binomial", "vector", "f", "prime"],
+        ["+", "-", "pm", "mp", "cdot", "=", "times", "div", "ast"],
+        ["therefore", "because"],
+        ["sum", "prod", "coprod", "int"],
+        ["N", "P", "Z", "Q", "R", "C", "H"]
+      ]},
+    { name: 'Greek',
+      example: '&pi;',
+      button_groups: [
+        ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota", "kappa", "lambda", "mu", "nu", "xi", "pi", "rho", "sigma", "tau", "upsilon", "phi", "chi", "psi", "omega"],
+        ["digamma", "varepsilon", "vartheta", "varkappa", "varpi", "varrho", "varsigma", "varphi"],
+        ["Gamma", "Delta", "Theta", "Lambda", "Xi", "Pi", "Sigma", "Upsilon", "Phi", "Psi", "Omega"]
+      ]},
+    { name: 'Operators',
+      example: '&oplus;',
+      button_groups: [["wedge", "vee", "cup", "cap", "diamond", "bigtriangleup", "ominus", "uplus", "otimes", "oplus", "bigtriangledown", "sqcap", "triangleleft", "sqcup", "triangleright", "odot", "bigcirc", "dagger", "ddagger", "wr", "amalg"]
+      ]},
+    { name: 'Relationships',
+      example: '&le;',
+      button_groups: [["<", ">", "equiv", "cong", "sim", "notin", "ne", "propto", "approx", "le", "ge", "in", "ni", "notni", "subset", "supset", "notsubset", "notsupset", "subseteq", "supseteq", "notsubseteq", "notsupseteq", "models", "prec", "succ", "preceq", "succeq", "simeq", "mid", "ll", "gg", "parallel", "bowtie", "sqsubset", "sqsupset", "smile", "sqsubseteq", "sqsupseteq", "doteq", "frown", "vdash", "dashv", "exists", "varnothing"]
+      ]},
+    { name: 'Arrows',
+      example: '&hArr;',
+      button_groups: [["longleftarrow", "longrightarrow", "Longleftarrow", "Longrightarrow", "longleftrightarrow", "updownarrow", "Longleftrightarrow", "Updownarrow", "mapsto", "nearrow", "hookleftarrow", "hookrightarrow", "searrow", "leftharpoonup", "rightharpoonup", "swarrow", "leftharpoondown", "rightharpoondown", "nwarrow", "downarrow", "Downarrow", "uparrow", "Uparrow", "rightarrow", "Rightarrow", "leftarrow", "lArr", "leftrightarrow", "Leftrightarrow"]
+      ]},
+    { name: 'Delimiters',
+      example: '{',
+      button_groups: [["lfloor", "rfloor", "lceil", "rceil", "slash", "opencurlybrace", "closecurlybrace"]
+      ]},
+    { name: 'Misc',
+      example: '&infin;',
+      button_groups: [["forall", "ldots", "cdots", "vdots", "ddots", "surd", "triangle", "ell", "top", "flat", "natural", "sharp", "wp", "bot", "clubsuit", "diamondsuit", "heartsuit", "spadesuit", "caret", "underscore", "backslash", "vert", "perp", "nabla", "hbar", "AA", "circ", "bullet", "setminus", "neg", "dots", "Re", "Im", "partial", "infty", "aleph", "deg", "angle"]
+      ]}
+  ];
+
+  //some html_templates aren't very pretty/useful, so we override them.
+  var html_template_overrides = {
+    binomial: '<span style="font-size: 0.5em"><span class="paren" style="font-size: 2.087912087912088em; ">(</span><span class="array"><span><var>n</var></span><span><var>m</var></span></span><span class="paren" style="font-size: 2.087912087912088em; ">)</span></span>',
+    frac: '<span style="font-size: 0.55em" class="fraction"><span class="numerator"><var>n</var></span><span class="denominator"><var>m</var></span><span style="width:0"></span></span>',
+    sqrt: '<span style="font-size: 0.8em; padding-top: 3px"><span class="sqrt-prefix">&radic;</span><span class="sqrt-stem" style="border-top-width: 1.7142857142857144px;">&nbsp;</span></span>',
+    nthroot: '<span style="font-size: 0.7em"><sup class="nthroot"><var>n</var></sup><span><span class="sqrt-prefix">&radic;</span><span class="sqrt-stem" style="border-top-width: 1.7142857142857144px; ">&nbsp;</span></span></span>',
+    supscript: '<sup style="font-size: 0.6em">sup</sup>',
+    subscript: '<sub style="font-size: 0.6em; line-height: 3.5;">sub</sub>',
+    vector: '<span class="array" style="font-size: 0.6em"><span class=""><var>a</var><span> </span><var>b</var></span><span class=""><var>c</var><span> </span><var>d</var></span></span>'
+  }
+
+  var tabs = [];
+  var panes = [];
+  $.each(button_tabs, function(index, tab){
+    tabs.push('<li><a href="#' + tab.name + '_tab"><span class="mathquill-rendered-math">' + tab.example + '</span>' + tab.name + '</a></li>');
+    var buttons = [];
+    $.each(tab.button_groups, function(index, group) {
+      $.each(group, function(index, cmd) {
+        var obj = new LatexCmds[cmd](undefined, cmd);
+        buttons.push('<li><a class="mathquill-rendered-math" title="' + (cmd.match(/^[a-z]+$/) ? '\\' + cmd : cmd) + '">' +
+                     (html_template_overrides[cmd] ? html_template_overrides[cmd] : '<span style="line-height: 1.5em">' + obj.html_template.join('') + '</span>') +
+                     '</a></li>');
+      });
+      buttons.push('<li class="mathquill-button-spacer"></li>');
+    });
+    panes.push('<div class="mathquill-tab-pane" id="' + tab.name + '_tab"><ul>' + buttons.join('') + '</ul></div>');
+  });
+  root.toolbar = $('<div class="mathquill-toolbar"><ul class="mathquill-tab-bar">' + tabs.join('') + '</ul><div class="mathquill-toolbar-panes">' + panes.join('') + '</div></div>').prependTo(jQ);
+
+  jQ.find('.mathquill-tab-bar li a').mouseenter(function() {
+    jQ.find('.mathquill-tab-bar li').removeClass('mathquill-tab-selected');
+    jQ.find('.mathquill-tab-pane').removeClass('mathquill-tab-pane-selected');
+    $(this).parent().addClass('mathquill-tab-selected');
+    $(this.href.replace(/.*#/, '#')).addClass('mathquill-tab-pane-selected');
+  });
+  jQ.find('.mathquill-tab-bar li:first-child a').mouseenter();
+  jQ.find('a.mathquill-rendered-math').mousedown(function(e) {
+    e.stopPropagation();
+  }).click(function(){
+    root.cursor.writeLatex(this.title, true);
+    jQ.focus();
+  });
+}
+
 function RootMathBlock(){}
 _ = RootMathBlock.prototype = new MathBlock;
 _.latex = function() {
@@ -465,7 +556,8 @@ _.keydown = function(e)
         this.cursor.selectRight();
     else //move to the end of the root block or the current block.
       this.cursor.clearSelection().appendTo(e.ctrlKey ? this : this.cursor.parent);
-    break;
+    e.preventDefault();
+    return false;
   case 36: //home
   case 'Home':
     if (e.shiftKey)
@@ -473,7 +565,8 @@ _.keydown = function(e)
         this.cursor.selectLeft();
     else //move to the start of the root block or the current block.
       this.cursor.clearSelection().prependTo(e.ctrlKey ? this : this.cursor.parent);
-    break;
+    e.preventDefault();
+    return false;
   case 37: //left
   case 'Left':
     if (e.ctrlKey) break;
@@ -482,7 +575,8 @@ _.keydown = function(e)
       this.cursor.selectLeft();
     else
       this.cursor.moveLeft();
-    break;
+    e.preventDefault();
+    return false;
   case 38: //up
   case 'Up':
     if (e.ctrlKey) break;
@@ -500,7 +594,8 @@ _.keydown = function(e)
       this.cursor.clearSelection().prependTo(this.cursor.parent);
     else if (this.cursor.parent !== this)
       this.cursor.clearSelection().insertBefore(this.cursor.parent.parent);
-    break;
+    e.preventDefault();
+    return false;
   case 39: //right
   case 'Right':
     if (e.ctrlKey) break;
@@ -509,7 +604,8 @@ _.keydown = function(e)
       this.cursor.selectRight();
     else
       this.cursor.moveRight();
-    break;
+    e.preventDefault();
+    return false;
   case 40: //down
   case 'Down':
     if (e.ctrlKey) break;
@@ -527,7 +623,8 @@ _.keydown = function(e)
       this.cursor.clearSelection().appendTo(this.cursor.parent);
     else if (this.cursor.parent !== this)
       this.cursor.clearSelection().insertAfter(this.cursor.parent.parent);
-    break;
+    e.preventDefault();
+    return false;
   case 46: //delete
   case 'Del':
   case 'U+007F':
@@ -548,6 +645,7 @@ _.keydown = function(e)
       while (this.cursor.prev)
         this.cursor.selectLeft();
       e.preventDefault();
+      return false;
     }
     else
       this.skipTextInput = false;
@@ -560,9 +658,6 @@ _.keydown = function(e)
         return this.parent.keydown(e);
 
       if (!this.cursor.selection) return true;
-
-      window['MathQuill LaTeX Clipboard'] = this.cursor.selection.latex();
-      e.preventDefault();
     }
     else
       this.skipTextInput = false;
@@ -574,8 +669,11 @@ _.keydown = function(e)
       if (this !== this.cursor.root) //so not stopPropagation'd at RootMathCommand
         return this.parent.keydown(e);
 
-      this.cursor.writeLatex(window['MathQuill LaTeX Clipboard']).show();
-      e.preventDefault();
+      var self = this;
+      setTimeout(function(){
+        self.cursor.writeLatex(self.cursor.root.textarea.children().val());
+        self.cursor.clearSelection();
+      });
     }
     else
       this.skipTextInput = false;
@@ -589,9 +687,7 @@ _.keydown = function(e)
 
       if (!this.cursor.selection) return true;
 
-      window['MathQuill LaTeX Clipboard'] = this.cursor.selection.latex();
       this.cursor.deleteSelection();
-      e.preventDefault();
     }
     else
       this.skipTextInput = false;
@@ -831,8 +927,9 @@ _.redraw = function() {
     fontSize: .9*height/+block.css('fontSize').slice(0,-2)+'em'
   });
 };
+_.optional_arg_command = 'nthroot';
 
-LatexCmds.sqrt = SquareRoot;
+LatexCmds.sqrt = LatexCmds['√'] = SquareRoot;
 
 function NthRoot(replacedFragment) {
   SquareRoot.call(this, replacedFragment);
@@ -853,11 +950,11 @@ LatexCmds.nthroot = NthRoot;
 
 // Round/Square/Curly/Angle Brackets (aka Parens/Brackets/Braces)
 function Bracket(open, close, cmd, end, replacedFragment) {
-  MathCommand.call(this, '\\left'+cmd,
+  MathCommand.call(this, cmd,
     ['<span><span class="paren">'+open+'</span><span></span><span class="paren">'+close+'</span></span>'],
     [open, close],
     replacedFragment);
-  this.end = '\\right'+end;
+  this.end = end;
 }
 _ = Bracket.prototype = new MathCommand;
 _.initBlocks = function(replacedFragment) {
@@ -880,7 +977,10 @@ LatexCmds.lbrace = CharCmds['{'] = proto(Bracket, function(replacedFragment) {
   Bracket.call(this, '{', '}', '\\{', '\\}', replacedFragment);
 });
 LatexCmds.langle = LatexCmds.lang = proto(Bracket, function(replacedFragment) {
-  Bracket.call(this,'&lang;','&rang;','\\langle ','\\rangle ',replacedFragment);
+  Bracket.call(this,'&lang;','&rang;','\\langle ','\\rangle ', replacedFragment);
+});
+LatexCmds.lbrack = LatexCmds.lbracket = CharCmds['['] = proto(Bracket, function(replacedFragment) {
+  Bracket.call(this, '[', ']', '\\[', '\\]', replacedFragment);
 });
 
 // Closing bracket matching opening bracket above
@@ -901,7 +1001,10 @@ LatexCmds.rbrace = CharCmds['}'] = proto(CloseBracket, function(replacedFragment
   CloseBracket.call(this, '{','}','\\{','\\}',replacedFragment);
 });
 LatexCmds.rangle = LatexCmds.rang = proto(CloseBracket, function(replacedFragment) {
-  CloseBracket.call(this,'&lang;','&rang;','\\langle ','\\rangle ',replacedFragment);
+  CloseBracket.call(this,'&lang;','&rang;','\\langle ','\\rangle ', replacedFragment);
+});
+LatexCmds.rbrack = LatexCmds.rbracket = CharCmds[']'] = proto(CloseBracket, function(replacedFragment) {
+  CloseBracket.call(this, '[', ']', '\\[', '\\]', replacedFragment);
 });
 
 function Paren(open, close, replacedFragment) {
@@ -912,9 +1015,6 @@ Paren.prototype = Bracket.prototype;
 LatexCmds.lparen = CharCmds['('] = proto(Paren, function(replacedFragment) {
   Paren.call(this, '(', ')', replacedFragment);
 });
-LatexCmds.lbrack = LatexCmds.lbracket = CharCmds['['] = proto(Paren, function(replacedFragment) {
-  Paren.call(this, '[', ']', replacedFragment);
-});
 
 function CloseParen(open, close, replacedFragment) {
   CloseBracket.call(this, open, close, open, close, replacedFragment);
@@ -923,9 +1023,6 @@ CloseParen.prototype = CloseBracket.prototype;
 
 LatexCmds.rparen = CharCmds[')'] = proto(CloseParen, function(replacedFragment) {
   CloseParen.call(this, '(', ')', replacedFragment);
-});
-LatexCmds.rbrack = LatexCmds.rbracket = CharCmds[']'] = proto(CloseParen, function(replacedFragment) {
-  CloseParen.call(this, '[', ']', replacedFragment);
 });
 
 function Pipes(replacedFragment) {
@@ -1404,7 +1501,7 @@ LatexCmds.vartheta = //AMS and LaTeX
   bind(Variable,'\\vartheta ','&#977;');
 
 //Greek constants, look best in un-italicised Times New Roman
-LatexCmds.pi = bind(NonSymbolaSymbol,'\\pi ','&pi;');
+LatexCmds.pi = LatexCmds['π'] = bind(NonSymbolaSymbol,'\\pi ','&pi;');
 LatexCmds.lambda = bind(NonSymbolaSymbol,'\\lambda ','&lambda;');
 
 //uppercase greek letters
@@ -1502,7 +1599,7 @@ LatexCmds.asymp = LatexCmds.approx = bind(BinaryOperator,'\\approx ','&asymp;');
 
 LatexCmds.lt = bind(BinaryOperator,'<','&lt;');
 
-LatexCmds.gt = bind(BinaryOperator,'<','&gt;');
+LatexCmds.gt = bind(BinaryOperator,'>','&gt;');
 
 LatexCmds.le = LatexCmds.leq = bind(BinaryOperator,'\\le ','&le;');
 
@@ -1561,7 +1658,7 @@ BigSymbol.prototype = new Symbol; //so instanceof will work
 LatexCmds.sum = LatexCmds.summation = bind(BigSymbol,'\\sum ','&sum;');
 LatexCmds.prod = LatexCmds.product = bind(BigSymbol,'\\prod ','&prod;');
 LatexCmds.coprod = LatexCmds.coproduct = bind(BigSymbol,'\\coprod ','&#8720;');
-LatexCmds.int = LatexCmds.integral = bind(BigSymbol,'\\int ','&int;');
+LatexCmds.int = LatexCmds.integral = LatexCmds['∫'] = bind(BigSymbol,'\\int ','&int;');
 
 
 
@@ -2038,13 +2135,39 @@ _.seek = function(target, pageX, pageY) {
 
   return cursor;
 };
-_.writeLatex = function(latex) {
+_.resolveNonItalicizedFunctions = function() {
+  var node = this.prev;
+  var raw = node ? node.latex().replace(/ $/, '') : null;
+  var count = 0;
+  var functions = {ln: 1, lg: 1, log: 1, span: 1, proj: 1, det: 1, dim: 1, min: 1, max: 1, mod: 1, lcm: 1, gcd: 1, gcf: 1, hcf: 1, lim: 1, sin: 1, sinh: 1, asin: 1, arcsin: 1, asinh: 1, arcsinh: 1, cos: 1, cosh: 1, acos: 1, arccos: 1, acosh: 1, arccosh: 1, tan: 1, tanh: 1, atan: 1, arctan: 1, atanh: 1, arctanh: 1, sec: 1, sech: 1, asec: 1, arcsec: 1, asech: 1, arcsech: 1, cosec: 1, cosech: 1, acosec: 1, arccosec: 1, acosech: 1, arccosech: 1, csc: 1, csch: 1, acsc: 1, arccsc: 1, acsch: 1, arccsch: 1, cotan: 1, cotanh: 1, acotan: 1, arccotan: 1, acotanh: 1, arccotanh: 1, cot: 1, coth: 1, acot: 1, arccot: 1, acoth: 1, arccoth: 1}
+  var latex = '';
+  while (node && raw) {
+    var single_char = raw.match(/^[a-z]$/);
+    if (single_char || latex && raw[0] == '\\' && functions[raw.substring(1)] && functions[(raw + latex).substring(1)]) {
+      count++;
+      latex = raw.replace(/\\/, '') + latex;
+      node = node.prev;
+      raw = node ? node.latex().replace(/ $/, '') : null;
+      if (!single_char || (!node || !raw.match(/^[a-z]$/)) && functions[latex]) {
+        for(var i = 0; i < count; i++) {
+          this.selectLeft();
+        }
+        this.writeLatex("\\" + latex);
+        return;
+      }
+    }
+    else {
+      return;
+    }
+  }
+};
+_.writeLatex = function(latex, noMoveCursor) {
   this.deleteSelection();
-  latex = ( latex && latex.match(/\\text\{([^{]|\\\{)*\}|\\[a-z]*|[^\s]/ig) ) || 0;
+  latex = ( latex && latex.match(/\\text\{([^{}]|\\\[{}])*\}|\\[\{\}\[\]]|[\(\)]|\\[a-z]*|[^\s]/ig) ) || 0;
   (function writeLatexBlock(cursor) {
     while (latex.length) {
       var token = latex.shift(); //pop first item
-      if (!token || token === '}') return;
+      if (!token || token === '}' || token === ']') return;
 
       var cmd;
       if (token.slice(0, 6) === '\\text{') {
@@ -2052,10 +2175,24 @@ _.writeLatex = function(latex) {
         cursor.insertNew(cmd).insertAfter(cmd);
         continue; //skip recursing through children
       }
-      else if (token === '\\left' || token === '\\right') { //REMOVEME HACK for parens
-        token = latex.shift();
-        if (token === '\\')
-          token = latex.shift();
+      else if (token === '|') { //treat pipe as VanillaSymbol, unless it's a right pipe, i.e it has
+                                //a previous pipe sibling w/ at least one other intermediate element
+        var prevPipe = cursor.prev && cursor.prev.prev;
+        while (prevPipe && (prevPipe.cmd != '|' || !prevPipe.isEmpty()))
+          prevPipe = prevPipe.prev;
+        if (prevPipe) {
+          prevPipe.remove();
+          cursor.selectFrom(prevPipe.next);
+          cursor.show().insertCh(token).insertAfter(cursor.parent.parent);
+          continue;
+        }
+        else {
+          cmd = new VanillaSymbol(token);
+          cursor.insertNew(cmd);
+        }
+      }
+      else if ($.inArray(token, ['\\lbrace', '\\{', '\\rbrace', '\\}', '\\langle', '\\lang', '\\rangle', '\\rang', '\\lparen', '(', '\\rparen', ')', '\\lbrack', '\\lbracket', '\\[', '\\rbrack', '\\rbracket', '\\]', '\\lpipe', '\\rpipe']) >= 0) {
+        token = token.replace(/^\\/, '');
 
         cursor.insertCh(token);
         cmd = cursor.prev || cursor.parent.parent;
@@ -2068,8 +2205,15 @@ _.writeLatex = function(latex) {
       else if (/^\\[a-z]+$/i.test(token)) {
         token = token.slice(1);
         var cmd = LatexCmds[token];
-        if (cmd)
-          cursor.insertNew(cmd = new cmd(undefined, token));
+        if (cmd) {
+          cmd = new cmd(undefined, token);
+          if (latex[0] === '[' && cmd.optional_arg_command) {
+            //e.g. \sqrt{m} -> SquareRoot, \sqrt[n]{m} -> NthRoot
+            token = cmd.optional_arg_command;
+            cmd = new LatexCmds[token](undefined, token);
+          }
+          cursor.insertNew(cmd);
+        }
         else {
           cmd = new TextBlock(token);
           cursor.insertNew(cmd).insertAfter(cmd);
@@ -2091,18 +2235,22 @@ _.writeLatex = function(latex) {
         var token = latex.shift();
         if (!token) return false;
 
-        if (token === '{')
+        if (token === '{' || token === '[')
           writeLatexBlock(cursor);
         else
           cursor.insertCh(token);
       });
-      cursor.insertAfter(cmd);
+      if (!noMoveCursor)
+        cursor.insertAfter(cmd);
     }
   }(this));
   return this.hide();
 };
 _.write = function(ch) {
-  return this.show().insertCh(ch);
+  var ret = this.show().insertCh(ch);
+  if (this.root.toolbar)
+    this.resolveNonItalicizedFunctions();
+  return ret;
 };
 _.insertCh = function(ch) {
   if (this.selection) {
@@ -2304,6 +2452,7 @@ _.selectFrom = function(anticursor) {
     right.next
   );
   this.insertAfter(right.next.prev || right.parent.lastChild);
+  this.selectLatex();
 };
 _.selectLeft = function() {
   if (this.selection) {
@@ -2331,6 +2480,7 @@ _.selectLeft = function() {
 
     this.hide().selection = new Selection(this.parent, this.prev, this.next.next);
   }
+  this.selectLatex();
 };
 _.selectRight = function() {
   if (this.selection) {
@@ -2358,8 +2508,26 @@ _.selectRight = function() {
 
     this.hide().selection = new Selection(this.parent, this.prev.prev, this.next);
   }
+  this.selectLatex();
+};
+_.selectLatex = function() {
+  var textarea = this.root.textarea.children();
+  var latex = this.selection ? this.selection.latex() : '';
+  textarea.val(latex);
+  if (typeof textarea[0].selectionStart == 'number') {
+    textarea[0].selectionStart = 0;
+    textarea[0].selectionEnd = latex.length;
+  }
+  else if (document.selection) {
+    var range = textarea[0].createTextRange();
+    range.collapse(true);
+    range.moveStart("character", 0);
+    range.moveEnd("character", latex.length);
+    range.select();
+  }
 };
 _.clearSelection = function() {
+  this.root.textarea.children().val('');
   if (this.show().selection) {
     this.selection.clear();
     delete this.selection;
@@ -2459,10 +2627,11 @@ $.fn.mathquill = function(cmd, latex) {
       });
   default:
     var textbox = cmd === 'textbox',
-      editable = textbox || cmd === 'editable',
+      include_toolbar = cmd === 'editor',
+      editable = include_toolbar || textbox || cmd === 'editable',
       RootBlock = textbox ? RootTextBlock : RootMathBlock;
     return this.each(function() {
-      createRoot($(this), new RootBlock, textbox, editable);
+      createRoot($(this), new RootBlock, textbox, editable, include_toolbar);
     });
   }
 };
@@ -2471,6 +2640,7 @@ $.fn.mathquill = function(cmd, latex) {
 //elements according to their CSS class.
 $(function() {
   $('.mathquill-editable').mathquill('editable');
+  $('.mathquill-editor').mathquill('editor');
   $('.mathquill-textbox').mathquill('textbox');
   $('.mathquill-embedded-latex').mathquill();
 });
