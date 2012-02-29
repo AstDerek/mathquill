@@ -2,7 +2,7 @@
  * Root math elements with event delegation.
  ********************************************/
 
-function createRoot(jQ, root, textbox, editable) {
+function createRoot(jQ, root, textbox, editable, include_toolbar) {
   var contents = jQ.contents().detach();
 
   if (!textbox)
@@ -12,7 +12,7 @@ function createRoot(jQ, root, textbox, editable) {
     block: root,
     revert: function() {
       jQ.empty().unbind('.mathquill')
-        .removeClass('mathquill-rendered-math mathquill-editable mathquill-textbox')
+        .removeClass('mathquill-rendered-math mathquill-editable mathquill-textbox mathquill-editor')
         .append(contents);
     }
   });
@@ -24,6 +24,8 @@ function createRoot(jQ, root, textbox, editable) {
   //textarea stuff
   var textareaSpan = root.textarea = $('<span class="textarea"><textarea></textarea></span>'),
     textarea = textareaSpan.children();
+  if (include_toolbar)
+    addToolbar(root, jQ);
 
   var textareaSelectionTimeout;
   root.selectionChanged = function() {
@@ -165,7 +167,7 @@ function createRoot(jQ, root, textbox, editable) {
     var latex = textarea.val();
     if (latex.slice(0,1) === '$' && latex.slice(-1) === '$')
       latex = latex.slice(1, -1);
-    else
+    else if (!latex.match(/^\\/)) // make it text if it doesn't look like latex
       latex = '\\text{' + latex + '}';
     cursor.writeLatex(latex).show();
     textarea.val('');
@@ -217,6 +219,93 @@ function createRoot(jQ, root, textbox, editable) {
         setTextareaSelection();
     }
   }
+}
+
+function addToolbar(root, jQ) {
+  // the button groups include most LatexCmds, de-duped and categorized.
+  // functions like "log" are excluded, since we have some fu to auto-convert
+  // them as they are typed (i.e. you can just type "log", don't need the \ )
+  var button_tabs = [
+    { name: 'Basic',
+      example: '+',
+      button_groups: [
+        ["subscript", "supscript", "frac", "sqrt", "nthroot", "langle", "binomial", "vector", "f", "prime"],
+        ["+", "-", "pm", "mp", "cdot", "=", "times", "div", "ast"],
+        ["therefore", "because"],
+        ["sum", "prod", "coprod", "int"],
+        ["N", "P", "Z", "Q", "R", "C", "H"]
+      ]},
+    { name: 'Greek',
+      example: '&pi;',
+      button_groups: [
+        ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota", "kappa", "lambda", "mu", "nu", "xi", "pi", "rho", "sigma", "tau", "upsilon", "phi", "chi", "psi", "omega"],
+        ["digamma", "varepsilon", "vartheta", "varkappa", "varpi", "varrho", "varsigma", "varphi"],
+        ["Gamma", "Delta", "Theta", "Lambda", "Xi", "Pi", "Sigma", "Upsilon", "Phi", "Psi", "Omega"]
+      ]},
+    { name: 'Operators',
+      example: '&oplus;',
+      button_groups: [["wedge", "vee", "cup", "cap", "diamond", "bigtriangleup", "ominus", "uplus", "otimes", "oplus", "bigtriangledown", "sqcap", "triangleleft", "sqcup", "triangleright", "odot", "bigcirc", "dagger", "ddagger", "wr", "amalg"]
+      ]},
+    { name: 'Relationships',
+      example: '&le;',
+      button_groups: [["<", ">", "equiv", "cong", "sim", "notin", "ne", "propto", "approx", "le", "ge", "in", "ni", "notni", "subset", "supset", "notsubset", "notsupset", "subseteq", "supseteq", "notsubseteq", "notsupseteq", "models", "prec", "succ", "preceq", "succeq", "simeq", "mid", "ll", "gg", "parallel", "bowtie", "sqsubset", "sqsupset", "smile", "sqsubseteq", "sqsupseteq", "doteq", "frown", "vdash", "dashv", "exists", "varnothing"]
+      ]},
+    { name: 'Arrows',
+      example: '&hArr;',
+      button_groups: [["longleftarrow", "longrightarrow", "Longleftarrow", "Longrightarrow", "longleftrightarrow", "updownarrow", "Longleftrightarrow", "Updownarrow", "mapsto", "nearrow", "hookleftarrow", "hookrightarrow", "searrow", "leftharpoonup", "rightharpoonup", "swarrow", "leftharpoondown", "rightharpoondown", "nwarrow", "downarrow", "Downarrow", "uparrow", "Uparrow", "rightarrow", "Rightarrow", "leftarrow", "lArr", "leftrightarrow", "Leftrightarrow"]
+      ]},
+    { name: 'Delimiters',
+      example: '{',
+      button_groups: [["lfloor", "rfloor", "lceil", "rceil", "slash", "opencurlybrace", "closecurlybrace"]
+      ]},
+    { name: 'Misc',
+      example: '&infin;',
+      button_groups: [["forall", "ldots", "cdots", "vdots", "ddots", "surd", "triangle", "ell", "top", "flat", "natural", "sharp", "wp", "bot", "clubsuit", "diamondsuit", "heartsuit", "spadesuit", "caret", "underscore", "backslash", "vert", "perp", "nabla", "hbar", "AA", "circ", "bullet", "setminus", "neg", "dots", "Re", "Im", "partial", "infty", "aleph", "deg", "angle"]
+      ]}
+  ];
+
+  //some html_templates aren't very pretty/useful, so we override them.
+  var html_template_overrides = {
+    binomial: '<span style="font-size: 0.5em"><span class="paren" style="font-size: 2.087912087912088em; ">(</span><span class="array"><span><var>n</var></span><span><var>m</var></span></span><span class="paren" style="font-size: 2.087912087912088em; ">)</span></span>',
+    frac: '<span style="font-size: 0.55em; vertical-align: middle" class="fraction"><span class="numerator"><var>n</var></span><span class="denominator"><var>m</var></span><span style="width:0"></span></span>',
+    sqrt: '<span class="block"><span class="sqrt-prefix">&radic;</span><span class="sqrt-stem">&nbsp;</span></span>',
+    nthroot: '<span style="font-size: 0.7em"><sup class="nthroot"><var>n</var></sup><span class="block"><span class="sqrt-prefix">&radic;</span><span class="sqrt-stem">&nbsp;</span></span></span>',
+    supscript: '<sup style="font-size: 0.6em">sup</sup>',
+    subscript: '<sub style="font-size: 0.6em; line-height: 3.5;">sub</sub>',
+    vector: '<span class="array" style="vertical-align: middle; font-size: 0.4em; line-height: 0.9em"><span>1</span><span>2</span><span>3</span></span>'
+  }
+
+  var tabs = [];
+  var panes = [];
+  $.each(button_tabs, function(index, tab){
+    tabs.push('<li><a href="#' + tab.name + '_tab"><span class="mathquill-rendered-math">' + tab.example + '</span>' + tab.name + '</a></li>');
+    var buttons = [];
+    $.each(tab.button_groups, function(index, group) {
+      $.each(group, function(index, cmd) {
+        var obj = new LatexCmds[cmd](undefined, cmd);
+        buttons.push('<li><a class="mathquill-rendered-math" title="' + (cmd.match(/^[a-z]+$/i) ? '\\' + cmd : cmd) + '">' +
+                     (html_template_overrides[cmd] ? html_template_overrides[cmd] : '<span style="line-height: 1.5em">' + obj.html_template.join('') + '</span>') +
+                     '</a></li>');
+      });
+      buttons.push('<li class="mathquill-button-spacer"></li>');
+    });
+    panes.push('<div class="mathquill-tab-pane" id="' + tab.name + '_tab"><ul>' + buttons.join('') + '</ul></div>');
+  });
+  root.toolbar = $('<div class="mathquill-toolbar"><ul class="mathquill-tab-bar">' + tabs.join('') + '</ul><div class="mathquill-toolbar-panes">' + panes.join('') + '</div></div>').prependTo(jQ);
+
+  jQ.find('.mathquill-tab-bar li a').mouseenter(function() {
+    jQ.find('.mathquill-tab-bar li').removeClass('mathquill-tab-selected');
+    jQ.find('.mathquill-tab-pane').removeClass('mathquill-tab-pane-selected');
+    $(this).parent().addClass('mathquill-tab-selected');
+    $(this.href.replace(/.*#/, '#')).addClass('mathquill-tab-pane-selected');
+  });
+  jQ.find('.mathquill-tab-bar li:first-child a').mouseenter();
+  jQ.find('a.mathquill-rendered-math').mousedown(function(e) {
+    e.stopPropagation();
+  }).click(function(){
+    root.cursor.writeLatex(this.title, true);
+    jQ.focus();
+  });
 }
 
 function RootMathBlock(){}

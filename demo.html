@@ -28,6 +28,13 @@ code span {
 .mathquill-rendered-math .mathquill-editable {
   min-width: 1cm;
 }
+.mathquill-editor {
+  width: 100%;
+}
+.mathquill-editor a {
+  color: #000;
+  text-shadow: none;
+}
 </style>
 
 </head>
@@ -60,6 +67,7 @@ code span {
 <p>This button runs the JavaScript code written on it to MathQuill-ify the following <code>&lt;span&gt;</code> element into an editable math textbox: <button onclick="$(this).text('$(this).next().mathquill(\'revert\')').next().mathquill('editable').focus(); var orig = arguments.callee; this.onclick = function(){  $(this).text('$(this).next().mathquill(\'editable\').focus()').next().mathquill('revert'); this.onclick = orig;$};">$(this).next().mathquill('editable').focus()</button>
 <span>\frac{d}{dx}\sqrt{x} = \frac{d}{dx}x^{\frac{1}{2}} = \frac{1}{2}x^{-\frac{1}{2}} = \frac{1}{2\sqrt{x}}</span></p>
 
+<p>Use the "mathquill-editor" class and you get a fancy WYSIWYG editor that's great for LaTeX noobs (it still supports LaTeX commands though): <span class="mathquill-editor">\sqrt[3]{8}=\frac{\sqrt{16}}{2}</span></p>
 </div>
 <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.2/jquery.js"></script>
 <script type="text/javascript" src="build/mathquill.js"></script>

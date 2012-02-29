@@ -186,13 +186,39 @@ _.seek = function(target, pageX, pageY) {
 
   return cursor;
 };
-_.writeLatex = function(latex) {
+_.resolveNonItalicizedFunctions = function() {
+  var node = this.prev;
+  var raw = node ? node.latex().replace(/ $/, '') : null;
+  var count = 0;
+  var functions = {ln: 1, lg: 1, log: 1, span: 1, proj: 1, det: 1, dim: 1, min: 1, max: 1, mod: 1, lcm: 1, gcd: 1, gcf: 1, hcf: 1, lim: 1, sin: 1, sinh: 1, asin: 1, arcsin: 1, asinh: 1, arcsinh: 1, cos: 1, cosh: 1, acos: 1, arccos: 1, acosh: 1, arccosh: 1, tan: 1, tanh: 1, atan: 1, arctan: 1, atanh: 1, arctanh: 1, sec: 1, sech: 1, asec: 1, arcsec: 1, asech: 1, arcsech: 1, cosec: 1, cosech: 1, acosec: 1, arccosec: 1, acosech: 1, arccosech: 1, csc: 1, csch: 1, acsc: 1, arccsc: 1, acsch: 1, arccsch: 1, cotan: 1, cotanh: 1, acotan: 1, arccotan: 1, acotanh: 1, arccotanh: 1, cot: 1, coth: 1, acot: 1, arccot: 1, acoth: 1, arccoth: 1}
+  var latex = '';
+  while (node && raw) {
+    var single_char = raw.match(/^[a-z]$/);
+    if (single_char || latex && raw[0] == '\\' && functions[raw.substring(1)] && functions[(raw + latex).substring(1)]) {
+      count++;
+      latex = raw.replace(/\\/, '') + latex;
+      node = node.prev;
+      raw = node ? node.latex().replace(/ $/, '') : null;
+      if (!single_char || (!node || !raw.match(/^[a-z]$/)) && functions[latex]) {
+        for(var i = 0; i < count; i++) {
+          this.selectLeft();
+        }
+        this.writeLatex("\\" + latex);
+        return;
+      }
+    }
+    else {
+      return;
+    }
+  }
+};
+_.writeLatex = function(latex, noMoveCursor) {
   this.deleteSelection();
   latex = ( latex && latex.match(/\\text\{([^}]|\\\})*\}|\\[a-z]*|[^\s]/ig) ) || 0;
   (function writeLatexBlock(cursor) {
     while (latex.length) {
       var token = latex.shift(); //pop first item
-      if (!token || token === '}') return;
+      if (!token || token === '}' || token === ']') return;
 
       var cmd;
       if (token.slice(0, 6) === '\\text{') {
@@ -216,8 +242,15 @@ _.writeLatex = function(latex) {
       else if (/^\\[a-z]+$/i.test(token)) {
         token = token.slice(1);
         var cmd = LatexCmds[token];
-        if (cmd)
-          cursor.insertNew(cmd = new cmd(undefined, token));
+        if (cmd) {
+          cmd = new cmd(undefined, token);
+          if (latex[0] === '[' && cmd.optional_arg_command) {
+            //e.g. \sqrt{m} -> SquareRoot, \sqrt[n]{m} -> NthRoot
+            token = cmd.optional_arg_command;
+            cmd = new LatexCmds[token](undefined, token);
+          }
+          cursor.insertNew(cmd);
+        }
         else {
           cmd = new TextBlock(token);
           cursor.insertNew(cmd).insertAfter(cmd);
@@ -239,18 +272,22 @@ _.writeLatex = function(latex) {
         var token = latex.shift();
         if (!token) return false;
 
-        if (token === '{')
+        if (token === '{' || token === '[')
           writeLatexBlock(cursor);
         else
           cursor.insertCh(token);
       });
-      cursor.insertAfter(cmd);
+      if (!noMoveCursor)
+        cursor.insertAfter(cmd);
     }
   }(this));
   return this.hide();
 };
 _.write = function(ch) {
-  return this.show().insertCh(ch);
+  var ret = this.show().insertCh(ch);
+  if (this.root.toolbar)
+    this.resolveNonItalicizedFunctions();
+  return ret;
 };
 _.insertCh = function(ch) {
   if (this.selection) {
