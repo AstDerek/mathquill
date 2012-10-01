@@ -3,7 +3,9 @@
  ********************************************/
 
 function createRoot(jQ, root, textbox, editable, include_toolbar) {
-  var contents = jQ.contents().detach();
+  var contents = jQ.contents().detach(),
+  data_textarea = jQ.attr('data-textarea'),
+  textarea;
 
   if (!textbox)
     jQ.addClass('mathquill-rendered-math');
@@ -23,10 +25,15 @@ function createRoot(jQ, root, textbox, editable, include_toolbar) {
 
   if (!editable) //if static, quit once we render the LaTeX
     return;
-
-  root.textarea = $('<span class="textarea"><textarea></textarea></span>')
-    .prependTo(jQ.addClass('mathquill-editable'));
-  var textarea = root.textarea.children();
+  
+  if (data_textarea) {
+    textarea = $(data_textarea);
+  }
+  else {
+    root.textarea = $('<span class="textarea"><textarea></textarea></span>')
+      .prependTo(jQ.addClass('mathquill-editable'));
+    textarea = root.textarea.children();
+  }
   if (textbox)
     jQ.addClass('mathquill-textbox');
   if (include_toolbar)
